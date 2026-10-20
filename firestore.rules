@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() { return request.auth != null; }
+
+    // Catálogos: visibles para todos, solo el personal los edita
+    match /servicios/{id}  { allow read: if true; allow write: if isAdmin(); }
+    match /estilistas/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /productos/{id}  { allow read: if true; allow write: if isAdmin(); }
+
+    // Bloqueos de horario: públicos (solo hora/estilista, sin datos personales)
+    match /bloqueos/{id} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['citaId','estilistaId','fecha','hora','duracion'])
+                    && request.resource.data.duracion is number && request.resource.data.duracion <= 480;
+      allow update, delete: if isAdmin();
+    }
+
+    // Citas: cualquiera puede reservar (queda "pendiente"), solo el personal las ve
+    match /citas/{id} {
+      allow create: if isAdmin() || (request.resource.data.estado == 'pendiente'
+                    && request.resource.data.origen == 'web'
+                    && request.resource.data.cliente is string && request.resource.data.cliente.size() < 80
+                    && request.resource.data.telefono is string && request.resource.data.telefono.size() < 20);
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Ventas: solo personal
+    match /ventas/{id} { allow read, write: if isAdmin(); }
+  }
+}
